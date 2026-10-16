@@ -1,4 +1,4 @@
-import { context, createAgent, tool } from "langchain"
+import { createAgent, tool } from "langchain"
 import { ChatGroq } from "@langchain/groq"
 import "dotenv/config"
 import z from "zod"
@@ -13,16 +13,16 @@ const getUserLocation = tool((_,config)=> {
     return user_id === "1" ? "Florida" : "SanFrancisco"
 },
 {
-    name : "get__user__location",
+    name : "get_user_location",
     description : "Retrieve user information based on UserId",
     schema : z.object({})
 });
 
 const getWeather = tool( (input) => {
-    return 'Its sunny in ${input.city}'
+    return `Its sunny in ${input.city}`
     },
     {
-        name : "get__weather",
+        name : "get_weather",
         description : "Get the weather for a given city",
         schema : z.object({
         city : z.string()

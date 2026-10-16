@@ -49,7 +49,7 @@ Every script invokes the agent and `console.log`s the result, so running one mak
 
 ### agent1.ts — tools
 
-The minimum viable agent. Two tools (`get__weather`, `get__Time`) with Zod schemas, wired into `createAgent` with a `ChatGroq` model. Shows the shape of everything that follows: a model, a list of tools, an `invoke`, and a read of the last message.
+The minimum viable agent. Two tools (`get_weather`, `get_time`) with Zod schemas, wired into `createAgent` with a `ChatGroq` model. Shows the shape of everything that follows: a model, a list of tools, an `invoke`, and a read of the last message.
 
 ### agent2.ts — runtime context
 
@@ -117,29 +117,6 @@ schema: z.object({ subject: z.string() })   // correct
 schema: z.object({ subject: z.string })     // wrong — passes the function itself
 ```
 
-## Known issues
-
-These are deliberate rough edges in the earlier scripts, left as-is. Fix them if you build on those files.
-
-- **agent1.ts and agent2.ts** — the tool bodies use single quotes around what look like template strings:
-
-  ```ts
-  return 'Its sunny in ${input.city}'   // literal, no interpolation
-  ```
-
-  The model receives the unrendered text `${input.city}`. Use backticks.
-- **agent3.ts** — `new ChatAnthropic({})` is constructed but never used; the agent uses the model from `initChatModel` below it.
-- **agent1.ts, agent2.ts, agent3.ts** — unused imports (`input` from zod in agent1, `context` in agent2 and agent3). Harmless, but noisy.
-- **agent1.ts** — tool names use double underscores (`get__weather`, `get__Time`), unlike the single-underscore names in later files. The model sees these strings verbatim.
-
-## Dependency note
-
-[agent4.ts](agent4.ts) and [agent5.ts](agent5.ts) import `MemorySaver` from `@langchain/langgraph`, which is **not declared in `package.json`**. It resolves today only because `langchain` depends on it and npm hoists it to the top level. That's fragile — a change in `langchain`'s dependencies or a switch to a stricter installer would break those two files. Add it explicitly if you keep using checkpointers:
-
-```bash
-npm install @langchain/langgraph
-```
-
 ## Versions
 
 ```
@@ -147,7 +124,7 @@ langchain            1.5.16
 @langchain/core      1.2.17
 @langchain/anthropic 1.5.12
 @langchain/groq       1.3.1
-@langchain/langgraph  1.5.0   (transitive, undeclared)
+@langchain/langgraph  1.5.0
 zod                   4.6.7
 dotenv               18.0.7
 tsx                  4.23.15

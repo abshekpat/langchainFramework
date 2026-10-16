@@ -1,7 +1,7 @@
 import { createAgent } from "langchain"
 import { ChatGroq } from "@langchain/groq"
 import "dotenv/config"
-import z, { input } from "zod"
+import z from "zod"
 import { tool } from "@langchain/core/tools"
 
 // Initialize the model using the official Groq ID
@@ -11,10 +11,10 @@ const chatModel = new ChatGroq({
 });
 
 const getWeather = tool( (input) => {
-    return 'Its sunny in ${input.city}'
+    return `Its sunny in ${input.city}`
     },
     {
-        name : "get__weather",
+        name : "get_weather",
         description : "Get the weather for a given city",
         schema : z.object({
         city : z.string()
@@ -24,10 +24,10 @@ const getWeather = tool( (input) => {
 );
 
 const getTime = tool( (input) => {
-    return 'The current time in ${input.city} is 3:00PM'
+    return `The current time in ${input.city} is 3:00PM`
     },
     {
-        name : "get__Time",
+        name : "get_time",
         description : "Get current time for a given city",
         schema : z.object({
         city : z.string()
