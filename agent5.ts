@@ -76,12 +76,12 @@ const agent = createAgent({
     middleware : [dynamicModelSelection] as const
 })
 
-const response = await agent.invoke({
+await agent.invoke({
     messages:[{role: "user", content : "what is weather outside"}]
 },config)
 
 
-const response1 = await agent.invoke({
+await agent.invoke({
     messages:[{role: "user", content : "what location did you just tell me about"}]
 },config)
 

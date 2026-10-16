@@ -1,11 +1,6 @@
-import { context, createAgent, initChatModel, tool } from "langchain"
-import { ChatAnthropic } from "@langchain/anthropic"
+import { createAgent, initChatModel, tool } from "langchain"
 import "dotenv/config"
 import z from "zod"
-
-const chatModel = new ChatAnthropic({
-    
-})
 
 const systemPrompt = `You are an expert weather forecaster who also speaks in a humorous way.
 You have access to two tools:
@@ -64,6 +59,4 @@ const agent = createAgent({
 const response = await agent.invoke({
     messages:[{role: "user", content : "what is weather outside"}]
 },config)
-const longMsg = response.messages[response.messages.length-1].content
 console.log(response.structuredResponse)
-// console.log(longMsg)
