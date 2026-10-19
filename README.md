@@ -1,13 +1,13 @@
 # langchainFramework
 
-A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone scripts, plus a separate RAG pipeline.
+A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus three RAG scripts.
 
-Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. [ragagent1.ts](ragagent1.ts) is independent of the agent series and shows document Q&A (RAG).
+Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), and retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)).
 
 ## Requirements
 
 - **Node.js 24+** (the `langchain` v1 packages require modern Node; developed on v24.21.0)
-- API keys for Groq and Anthropic — used by the agent scripts — and a Google (Gemini) key for the embeddings in `ragagent1.ts`. The scripts import `"dotenv/config"`, so a `.env` in the project root is picked up automatically
+- API keys for Groq and Anthropic — used by the agent scripts — and a Google (Gemini) key for the embeddings in the `ragagentN.ts` scripts. The scripts import `"dotenv/config"`, so a `.env` in the project root is picked up automatically
 
 ## Setup
 
@@ -35,7 +35,7 @@ npx tsx agent6.ts
 
 All scripts use **top-level `await`**, which is why `package.json` sets `"type": "module"`. Running them as CommonJS will fail with `Top-level await is currently not supported with the "cjs" output format`.
 
-Every script invokes the agent and `console.log`s the result, so running one makes real API calls against your key.
+Each script `console.log`s its result — most invoke an agent, while `ragagent1.ts` only runs a similarity search. Either way, running one makes real API calls against your keys.
 
 ## The scripts
 
@@ -48,7 +48,9 @@ Every script invokes the agent and `console.log`s the result, so running one mak
 | [agent5.ts](agent5.ts) | Writing your own middleware | `createMiddleware`, `wrapModelCall` |
 | [agent6.ts](agent6.ts) | Built-in middleware stack | fallback, summarization, tool selection |
 | [agent7.ts](agent7.ts) | PII detection and redaction | `piiMiddleware`, custom detectors |
-| [ragagent1.ts](ragagent1.ts) | Document Q&A (RAG) | `PDFLoader`, text splitting, Google embeddings, `MemoryVectorStore` |
+| [ragagent1.ts](ragagent1.ts) | RAG foundations | `PDFLoader`, text splitting, Google embeddings, `MemoryVectorStore`, `asRetriever` |
+| [ragagent2.ts](ragagent2.ts) | RAG agent: retrieve, then answer | `dynamicSystemPromptMiddleware`, MMR retriever, context injection |
+| [ragagent3.ts](ragagent3.ts) | RAG across several documents | one store for multiple PDFs, cross-document questions |
 
 ### agent1.ts — tools
 
@@ -104,7 +106,7 @@ Pass custom patterns as strings, not as `/.../g` literals — the library compil
 
 Strategies: `redact` → `[REDACTED_SSN]`, `mask` → partial (e.g. `****-****-****-1234`), `hash` → deterministic pseudonym, `block` → throw `PIIDetectionError`.
 
-### ragagent1.ts — document Q&A (RAG)
+### ragagent1.ts — RAG foundations
 
 A standalone retrieval pipeline, no agent or tools involved:
 
@@ -112,9 +114,37 @@ A standalone retrieval pipeline, no agent or tools involved:
 2. `RecursiveCharacterTextSplitter({ chunkSize: 1000, chunkOverlap: 200 })` breaks the pages into chunks
 3. `GoogleGenerativeAIEmbeddings({ model: "gemini-embedding-001" })` embeds the chunks — this is why `GOOGLE_API_KEY` is required
 4. `MemoryVectorStore` holds the vectors in process memory
-5. `similaritySearch(...)` retrieves the closest chunks for a question
+5. `similaritySearch(...)` retrieves the closest chunks for a question, and `asRetriever(...)` wraps the store in the standard retriever interface
 
-Groq has no embeddings endpoint and Anthropic doesn't offer an embeddings API, so this script deliberately uses Google. Swap in `OpenAIEmbeddings` or a local HuggingFace model if you prefer.
+Groq has no embeddings endpoint and Anthropic doesn't offer an embeddings API, so these scripts deliberately use Google. Swap in `OpenAIEmbeddings` or a local HuggingFace model if you prefer.
+
+### ragagent2.ts — retrieval inside an agent
+
+Takes the same load → split → embed → store pipeline and plugs it into `createAgent` with `dynamicSystemPromptMiddleware`. On every model call the middleware:
+
+1. reads the user's question from `state.messages`
+2. calls `retriever.invoke(query)` — an MMR retriever (`k: 4`, `fetchK: 20`)
+3. joins the retrieved chunks and returns them as the system prompt
+
+So retrieval is not a separate step in `main`; it happens inside the agent's model-call loop every turn. The agent then answers with `ChatGroq` (`openai/gpt-oss-120b`).
+
+One detail that matters:
+
+- **`fetchK` must be ≥ `k`.** `fetchK` is how many candidates MMR considers before selecting `k` diverse results. `fetchK: 1` returns just one document regardless of `k`.
+
+### ragagent3.ts — multi-document RAG
+
+Loads all three PDFs in `ProjectDocs/` into **one** vector store, so a single question can draw on several documents at once:
+
+```ts
+const pdfPaths = [
+  `${process.cwd()}/ProjectDocs/nke-10k-2023.pdf`,
+  `${process.cwd()}/ProjectDocs/Nike-Inc-2025_10K.pdf`,
+  `${process.cwd()}/ProjectDocs/nike-growth-story.pdf`
+]
+```
+
+The middleware and retriever are the same shape as `ragagent2.ts`. The sample prompt asks for Nike's 2023 and 2025 revenue plus its origin story — a question that spans the two 10-Ks and the narrative PDF. Note that retrieval cannot tell you which document a chunk came from unless you read `doc.metadata.source`.
 
 ## Patterns worth knowing
 
