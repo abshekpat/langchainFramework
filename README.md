@@ -1,8 +1,8 @@
 # langchainFramework
 
-A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus three RAG scripts.
+A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus four RAG scripts.
 
-Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), and retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)).
+Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)), and loading non-PDF documents ([ragagent4.ts](ragagent4.ts)).
 
 ## Requirements
 
@@ -51,6 +51,7 @@ Each script `console.log`s its result — most invoke an agent, while `ragagent1
 | [ragagent1.ts](ragagent1.ts) | RAG foundations | `PDFLoader`, text splitting, Google embeddings, `MemoryVectorStore`, `asRetriever` |
 | [ragagent2.ts](ragagent2.ts) | RAG agent: retrieve, then answer | `dynamicSystemPromptMiddleware`, MMR retriever, context injection |
 | [ragagent3.ts](ragagent3.ts) | RAG across several documents | one store for multiple PDFs, cross-document questions |
+| [ragagent4.ts](ragagent4.ts) | RAG over a Word document | `DocxLoader`, same pipeline on `.docx` input |
 
 ### agent1.ts — tools
 
@@ -145,6 +146,18 @@ const pdfPaths = [
 ```
 
 The middleware and retriever are the same shape as `ragagent2.ts`. The sample prompt asks for Nike's 2023 and 2025 revenue plus its origin story — a question that spans the two 10-Ks and the narrative PDF. Note that retrieval cannot tell you which document a chunk came from unless you read `doc.metadata.source`.
+
+### ragagent4.ts — loading a Word document
+
+Same RAG agent, different input format: `DocxLoader` replaces `PDFLoader` and reads `ProjectDocs/nike-growth-story.docx`. Everything downstream — split, embed, store, MMR retriever, middleware — is unchanged.
+
+```ts
+import { DocxLoader } from "@langchain/community/document_loaders/fs/docx"
+
+const loader = new DocxLoader(`${process.cwd()}/ProjectDocs/nike-growth-story.docx`)
+```
+
+`@langchain/community` ships loaders for many formats under the same `document_loaders/fs/*` path (`pdf`, `docx`, `csv`, `json`, `text`, …), so switching formats is usually a one-line change.
 
 ## Patterns worth knowing
 
