@@ -1,13 +1,13 @@
 # langchainFramework
 
-A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across six standalone scripts.
+A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone scripts, plus a separate RAG pipeline.
 
-Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware. They are independent of each other, so read them in order and run whichever one you're interested in.
+Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. [ragagent1.ts](ragagent1.ts) is independent of the agent series and shows document Q&A (RAG).
 
 ## Requirements
 
 - **Node.js 24+** (the `langchain` v1 packages require modern Node; developed on v24.21.0)
-- API keys for Groq and Anthropic — the scripts import `"dotenv/config"`, so a `.env` in the project root is picked up automatically
+- API keys for Groq and Anthropic — used by the agent scripts — and a Google (Gemini) key for the embeddings in `ragagent1.ts`. The scripts import `"dotenv/config"`, so a `.env` in the project root is picked up automatically
 
 ## Setup
 
@@ -20,6 +20,7 @@ Create a `.env` in the project root:
 ```bash
 GROQ_API_KEY=your_groq_key
 ANTHROPIC_API_KEY=your_anthropic_key
+GOOGLE_API_KEY=your_google_key
 ```
 
 `.env` is already listed in `.gitignore` — keep it that way.
@@ -46,6 +47,8 @@ Every script invokes the agent and `console.log`s the result, so running one mak
 | [agent4.ts](agent4.ts) | Conversation memory | `MemorySaver`, `thread_id`, multi-turn |
 | [agent5.ts](agent5.ts) | Writing your own middleware | `createMiddleware`, `wrapModelCall` |
 | [agent6.ts](agent6.ts) | Built-in middleware stack | fallback, summarization, tool selection |
+| [agent7.ts](agent7.ts) | PII detection and redaction | `piiMiddleware`, custom detectors |
+| [ragagent1.ts](ragagent1.ts) | Document Q&A (RAG) | `PDFLoader`, text splitting, Google embeddings, `MemoryVectorStore` |
 
 ### agent1.ts — tools
 
@@ -78,6 +81,40 @@ The full pipeline, with three built-in middleware composed in one stack:
 Three tools are registered (`get_weather`, `search`, `send_email`) and a single prompt exercises two of them at once.
 
 **Ordering matters.** Fallback sits first so it wraps the other middleware's model calls — if summarization or tool selection hits an API error, the fallback catches it too. In general, put fallback outermost.
+
+### agent7.ts — PII detection
+
+Registers four `piiMiddleware` instances to scrub personally identifiable information from user messages before they reach the model:
+
+- `credit_card` — built-in detector, Luhn-validated, `mask` strategy (keeps the last four digits)
+- `email` — built-in detector, `redact` strategy
+- `ssn` and `phone` — **custom** detectors supplied as regex **strings**
+
+The current API is one middleware per PII type, not one middleware with a `rules` map (the older `piiRedactionMiddleware` is deprecated):
+
+```ts
+piiMiddleware("credit_card", { strategy: "mask" }),
+piiMiddleware("ssn", {
+  detector: "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+  strategy: "redact"
+}),
+```
+
+Pass custom patterns as strings, not as `/.../g` literals — the library compiles the string into a fresh global regex on every call, while a shared `RegExp` object carries `lastIndex` state between calls and can silently skip matches. Built-in types need no detector at all.
+
+Strategies: `redact` → `[REDACTED_SSN]`, `mask` → partial (e.g. `****-****-****-1234`), `hash` → deterministic pseudonym, `block` → throw `PIIDetectionError`.
+
+### ragagent1.ts — document Q&A (RAG)
+
+A standalone retrieval pipeline, no agent or tools involved:
+
+1. `PDFLoader` reads `ProjectDocs/nke-10k-2023.pdf` (path built from `process.cwd()`, so run it from the project root)
+2. `RecursiveCharacterTextSplitter({ chunkSize: 1000, chunkOverlap: 200 })` breaks the pages into chunks
+3. `GoogleGenerativeAIEmbeddings({ model: "gemini-embedding-001" })` embeds the chunks — this is why `GOOGLE_API_KEY` is required
+4. `MemoryVectorStore` holds the vectors in process memory
+5. `similaritySearch(...)` retrieves the closest chunks for a question
+
+Groq has no embeddings endpoint and Anthropic doesn't offer an embeddings API, so this script deliberately uses Google. Swap in `OpenAIEmbeddings` or a local HuggingFace model if you prefer.
 
 ## Patterns worth knowing
 
@@ -120,15 +157,22 @@ schema: z.object({ subject: z.string })     // wrong — passes the function its
 ## Versions
 
 ```
-langchain            1.5.16
-@langchain/core      1.2.17
-@langchain/anthropic 1.5.12
-@langchain/groq       1.3.1
-@langchain/langgraph  1.5.0
-zod                   4.6.7
-dotenv               18.0.7
-tsx                  4.23.15
-typescript            7.0.2
+langchain                1.5.16
+@langchain/core          1.2.18
+@langchain/anthropic     1.5.12
+@langchain/groq          1.3.1
+@langchain/google-genai  2.3.2
+@langchain/community     1.1.29
+@langchain/openai        1.6.2
+@langchain/textsplitters 1.0.2
+@langchain/langgraph     1.5.0
+pdf-parse                2.4.5
+zod                      3.25.32
+dotenv                   16.4.5
+tsx                      4.23.15
+typescript               7.0.2
 ```
 
 The v1 `createAgent` API is relatively young, and middleware option names have moved. `summarizationMiddleware` in particular renamed `maxTokensBeforeSummary` → `trigger: { tokens }` and `messagesToKeep` → `keep: { messages }`; the old names still work but log deprecation warnings. agent6.ts uses the current names.
+
+Likewise, `piiRedactionMiddleware` (a single middleware with a `rules` map) is deprecated in favor of `piiMiddleware(piiType, options)`, one instance per PII type. agent7.ts uses the current API.
