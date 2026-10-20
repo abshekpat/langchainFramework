@@ -1,13 +1,18 @@
 # langchainFramework
 
-A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus four RAG scripts.
+A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus five RAG scripts.
 
-Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)), and loading non-PDF documents ([ragagent4.ts](ragagent4.ts)).
+Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)), loading non-PDF documents ([ragagent4.ts](ragagent4.ts)), and exposing the retriever as a tool the model chooses when to call ([ragagent5.ts](ragagent5.ts)).
 
 ## Requirements
 
 - **Node.js 24+** (the `langchain` v1 packages require modern Node; developed on v24.21.0)
-- API keys for Groq and Anthropic — used by the agent scripts — and a Google (Gemini) key for the embeddings in the `ragagentN.ts` scripts. The scripts import `"dotenv/config"`, so a `.env` in the project root is picked up automatically
+- API keys for Groq and Anthropic — used by the agent scripts — and a Google (Gemini) key for the embeddings in `ragagent1.ts`–`ragagent4.ts`. The scripts import `"dotenv/config"`, so a `.env` in the project root is picked up automatically
+- **Ollama** running locally with the `nomic-embed-text` model, for [ragagent5.ts](ragagent5.ts). That script embeds on your machine, so it needs no embeddings API key:
+
+  ```bash
+  ollama pull nomic-embed-text
+  ```
 
 ## Setup
 
@@ -52,6 +57,7 @@ Each script `console.log`s its result — most invoke an agent, while `ragagent1
 | [ragagent2.ts](ragagent2.ts) | RAG agent: retrieve, then answer | `dynamicSystemPromptMiddleware`, MMR retriever, context injection |
 | [ragagent3.ts](ragagent3.ts) | RAG across several documents | one store for multiple PDFs, cross-document questions |
 | [ragagent4.ts](ragagent4.ts) | RAG over a Word document | `DocxLoader`, same pipeline on `.docx` input |
+| [ragagent5.ts](ragagent5.ts) | Multi-tool agent with a retrieval tool | retriever wrapped in `tool()`, local Ollama embeddings, `claude-haiku-4-5` |
 
 ### agent1.ts — tools
 
@@ -159,6 +165,39 @@ const loader = new DocxLoader(`${process.cwd()}/ProjectDocs/nike-growth-story.do
 
 `@langchain/community` ships loaders for many formats under the same `document_loaders/fs/*` path (`pdf`, `docx`, `csv`, `json`, `text`, …), so switching formats is usually a one-line change.
 
+### ragagent5.ts — the retriever as a tool
+
+The same three-PDF corpus, but retrieval is no longer forced on every turn. Instead the retriever is wrapped in a tool, alongside the weather and email tools from the earlier agent scripts:
+
+```ts
+const retrieve = tool(async ({ query }) => {
+  const docs = await retriever.invoke(query)
+  return docs.map((doc) => doc.pageContent).join("\n\n")
+}, {
+  name: "retrieve",
+  description: "Retrieve information from multiple pdf documents",
+  schema: z.object({ query: z.string() })
+})
+
+const agent = createAgent({
+  model: "claude-haiku-4-5",
+  tools: [retrieve, getWeather, emailTool],
+  systemPrompt: "..."
+})
+```
+
+That's the key difference from `ragagent2.ts`–`ragagent4.ts`. Those inject context with `dynamicSystemPromptMiddleware`, so every model call carries retrieved text whether it needs it or not. Here the model decides whether to call `retrieve`, and it can call `get_weather` or `send_email` in the same run — useful when a question spans a document lookup and something else.
+
+Embeddings are local:
+
+```ts
+const embeddings = new OllamaEmbeddings({ model: "nomic-embed-text" })
+```
+
+`OllamaEmbeddings` sends the chunk texts to the Ollama server at `localhost:11434`, which runs the model on your machine and returns 768-dimension vectors. There's no API key, quota or per-minute throttle, so `addDocuments(allSplits)` embeds everything in one pass — no batching or sleeping required. The retriever still uses MMR (`k: 2`, `fetchK: 20`); `k` is deliberately low because Groq's free tier caps prompts at 8000 tokens/minute, and the script is often pointed at `gpt-oss-20b`. With an Anthropic model the cap doesn't apply and `k: 4` is fine.
+
+The query and the documents must be embedded by the same model. If you switch providers, re-embed the corpus — vectors from `gemini-embedding-001` and `nomic-embed-text` are not comparable.
+
 ## Patterns worth knowing
 
 ### Two ways to get a model
@@ -209,6 +248,7 @@ langchain                1.5.16
 @langchain/openai        1.6.2
 @langchain/textsplitters 1.0.2
 @langchain/langgraph     1.5.0
+@langchain/ollama        1.3.0
 pdf-parse                2.4.5
 zod                      3.25.32
 dotenv                   16.4.5
