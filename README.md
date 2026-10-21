@@ -1,8 +1,8 @@
 # langchainFramework
 
-A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus five RAG scripts.
+A hands-on walkthrough of the LangChain JS **v1** agent API (`createAgent`), built up one feature at a time across seven standalone agent scripts, plus five RAG scripts and a LangGraph dev-server entry point.
 
-Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)), loading non-PDF documents ([ragagent4.ts](ragagent4.ts)), and exposing the retriever as a tool the model chooses when to call ([ragagent5.ts](ragagent5.ts)).
+Each `agentN.ts` is a runnable file focused on a single concept — tools, runtime context, structured output, memory, custom middleware, built-in middleware, PII handling. They are independent of each other, so read them in order and run whichever one you're interested in. The `ragagentN.ts` files are a separate progression: raw retrieval ([ragagent1.ts](ragagent1.ts)), retrieval wired into an agent ([ragagent2.ts](ragagent2.ts)), retrieval across multiple documents ([ragagent3.ts](ragagent3.ts)), loading non-PDF documents ([ragagent4.ts](ragagent4.ts)), and exposing the retriever as a tool the model chooses when to call ([ragagent5.ts](ragagent5.ts)). [ragagentServer.ts](ragagentServer.ts) takes that last agent and serves it through LangGraph's dev server so it can be driven from Studio or over HTTP instead of `tsx`.
 
 ## Requirements
 
@@ -42,6 +42,30 @@ All scripts use **top-level `await`**, which is why `package.json` sets `"type":
 
 Each script `console.log`s its result — most invoke an agent, while `ragagent1.ts` only runs a similarity search. Either way, running one makes real API calls against your keys.
 
+### LangGraph dev server
+
+`ragagentServer.ts` is the same multi-tool agent as `ragagent5.ts`, exposed through LangGraph's dev server. The server reads its configuration from `langgraph.json` in the project root:
+
+```json
+{
+  "graphs": { "rag_agent": "./ragagentServer.ts:graph" },
+  "env": ".env"
+}
+```
+
+Start it with:
+
+```bash
+npx langgraph dev
+```
+
+The loader imports the file named before the colon and reads the export named after it, then serves the graph on `http://localhost:2024` — LangGraph Studio opens shortly after, and the graph also accepts HTTP calls. `"env": ".env"` loads your keys into the server process, so `GROQ_API_KEY`/`ANTHROPIC_API_KEY` must be present there; the `ragagent5.ts` style `import "dotenv/config"` still runs too.
+
+Two details worth knowing:
+
+- **The export name must match.** `"./ragagentServer.ts:graph"` requires an actual `export const graph = agent`. A module-local `const graph` produces the CLI's `Failed to load graph: graph is null` error.
+- **The vector store is built at import.** The server embeds all chunks before it reports ready, and again on every reload, so startup takes as long as a script run instead of being instant.
+
 ## The scripts
 
 | File | Focus | New concepts |
@@ -58,6 +82,7 @@ Each script `console.log`s its result — most invoke an agent, while `ragagent1
 | [ragagent3.ts](ragagent3.ts) | RAG across several documents | one store for multiple PDFs, cross-document questions |
 | [ragagent4.ts](ragagent4.ts) | RAG over a Word document | `DocxLoader`, same pipeline on `.docx` input |
 | [ragagent5.ts](ragagent5.ts) | Multi-tool agent with a retrieval tool | retriever wrapped in `tool()`, local Ollama embeddings, `claude-haiku-4-5` |
+| [ragagentServer.ts](ragagentServer.ts) | Agent served by LangGraph | `langgraph.json`, `langgraph dev`, exported `graph` |
 
 ### agent1.ts — tools
 
@@ -249,6 +274,7 @@ langchain                1.5.16
 @langchain/textsplitters 1.0.2
 @langchain/langgraph     1.5.0
 @langchain/ollama        1.3.0
+@langchain/langgraph-cli 1.5.4
 pdf-parse                2.4.5
 zod                      3.25.32
 dotenv                   16.4.5
